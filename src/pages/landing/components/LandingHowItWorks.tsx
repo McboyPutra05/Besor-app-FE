@@ -1,28 +1,48 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-// Hook for scroll-triggered animation (pure smooth fade in / out)
+// Hook for scroll-triggered animation (smooth fade in on enter from below, stays visible when scrolling down, fades out when scrolling back up)
 function useScrollReveal() {
   const ref = useRef<HTMLDivElement | null>(null);
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setIsVisible(entry.isIntersecting);
-      },
-      {
-        threshold: 0.1,
-        rootMargin: '40px 0px 40px 0px',
-      }
-    );
+    const handleScroll = () => {
+      if (!ref.current) return;
+      const rect = ref.current.getBoundingClientRect();
+      const windowHeight = window.innerHeight || document.documentElement.clientHeight;
+      
+      // Trigger threshold: 80px above the bottom edge of the viewport
+      const triggerThreshold = windowHeight - 80;
 
-    const currentRef = ref.current;
-    if (currentRef) {
-      observer.observe(currentRef);
-    }
+      // Element is visible when:
+      // 1. Its top has entered from below the screen (rect.top <= triggerThreshold)
+      // 2. AND it has not scrolled way past the section (> 2500px above)
+      // This ensures that when scrolling DOWN to step 4, step 3 (and step 2, 1) REMAINS visible!
+      // When scrolling UP, as each step exits downwards (rect.top > triggerThreshold), it smoothly fades out!
+      const shouldBeVisible = rect.top <= triggerThreshold && rect.bottom > -2500;
+      setIsVisible(shouldBeVisible);
+    };
+
+    let ticking = false;
+    const onScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          handleScroll();
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+
+    // Initial check on mount
+    handleScroll();
 
     return () => {
-      if (currentRef) observer.unobserve(currentRef);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
     };
   }, []);
 
@@ -121,27 +141,26 @@ export default function LandingHowItWorks() {
 
         {/* Zigzag Timeline Container */}
         <div className="relative flex flex-col gap-16 sm:gap-24">
-          {/* Vertical Guide Line */}
-          <div className="hidden lg:block absolute left-1/2 top-10 bottom-10 w-0.5 bg-gradient-to-b from-primary via-blue-400 to-tertiary -translate-x-1/2 opacity-30"></div>
+          {/* Vertical Divider Line in the center */}
+          <div className="hidden lg:block absolute left-1/2 top-8 bottom-8 w-0.5 bg-gradient-to-b from-blue-500 via-indigo-500 to-emerald-500 -translate-x-1/2 opacity-35 z-0 pointer-events-none" />
 
           {/* STEP 1 (ZIG: Text Left, Interactive Visual Right) */}
           <div
             id="step-1"
             ref={step1.ref}
-            className={`relative grid grid-cols-1 lg:grid-cols-12 gap-8 items-center transition-opacity duration-700 ease-in-out ${
-              step1.isVisible ? 'opacity-100' : 'opacity-0'
+            className={`relative grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-24 xl:gap-28 items-center transition-opacity duration-700 ease-out will-change-[opacity] ${
+              step1.isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
             }`}
           >
             {/* Center Node Marker on lg screens */}
-            <div className="hidden lg:flex absolute left-1/2 -translate-x-1/2 w-9 h-9 rounded-full bg-primary text-white font-bold text-xs items-center justify-center shadow-md shadow-primary/30 ring-4 ring-surface-container-low z-10">
+            <div className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-gradient-to-tr from-blue-600 via-blue-700 to-indigo-700 text-white font-black text-sm items-center justify-center shadow-lg shadow-blue-500/30 ring-8 ring-surface-container-low z-10 select-none">
               1
             </div>
-            <div className="lg:col-span-6 space-y-4">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-bold">
-                <span className="w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center text-[11px]">
-                  1
-                </span>
-                Langkah Pertama
+
+            <div className="lg:col-span-6 space-y-4 lg:pr-8">
+              <div className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-blue-50 border border-blue-200/80 text-blue-700 text-xs font-bold shadow-2xs">
+                <span className="lg:hidden w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold">1</span>
+                <span>Langkah Pertama</span>
               </div>
               <h3 className="text-2xl sm:text-3xl font-extrabold text-on-surface">
                 Pilih Jadwal &amp; Paket Servis Secara Online
@@ -162,7 +181,7 @@ export default function LandingHowItWorks() {
             </div>
 
             {/* Interactive Simulator Card 1 */}
-            <div className="lg:col-span-6">
+            <div className="lg:col-span-6 lg:pl-8">
               <div className="bg-surface-container-lowest p-6 rounded-2xl shadow-md border border-outline-variant/40 space-y-4 hover:shadow-lg transition-shadow">
                 <div className="flex items-center justify-between pb-3 border-b border-outline-variant/30">
                   <span className="text-xs font-bold uppercase tracking-wider text-secondary">
@@ -271,16 +290,17 @@ export default function LandingHowItWorks() {
           <div
             id="step-2"
             ref={step2.ref}
-            className={`relative grid grid-cols-1 lg:grid-cols-12 gap-8 items-center transition-opacity duration-700 ease-in-out ${
-              step2.isVisible ? 'opacity-100' : 'opacity-0'
+            className={`relative grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-24 xl:gap-28 items-center transition-opacity duration-700 ease-out will-change-[opacity] ${
+              step2.isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
             }`}
           >
             {/* Center Node Marker on lg screens */}
-            <div className="hidden lg:flex absolute left-1/2 -translate-x-1/2 w-9 h-9 rounded-full bg-blue-600 text-white font-bold text-xs items-center justify-center shadow-md shadow-blue-600/30 ring-4 ring-surface-container-low z-10">
+            <div className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-gradient-to-tr from-blue-600 via-blue-700 to-indigo-700 text-white font-black text-sm items-center justify-center shadow-lg shadow-blue-500/30 ring-8 ring-surface-container-low z-10 select-none">
               2
             </div>
+
             {/* Visual Left */}
-            <div className="lg:col-span-6 order-2 lg:order-1">
+            <div className="lg:col-span-6 order-2 lg:order-1 lg:pr-8">
               <div className="bg-surface-container-lowest p-6 rounded-2xl shadow-md border border-outline-variant/40 space-y-4 hover:shadow-lg transition-shadow">
                 <div className="flex items-center justify-between pb-3 border-b border-outline-variant/30">
                   <div className="flex items-center gap-2">
@@ -336,12 +356,10 @@ export default function LandingHowItWorks() {
             </div>
 
             {/* Text Right */}
-            <div className="lg:col-span-6 order-1 lg:order-2 space-y-4">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-bold">
-                <span className="w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center text-[11px]">
-                  2
-                </span>
-                Langkah Kedua
+            <div className="lg:col-span-6 order-1 lg:order-2 space-y-4 lg:pl-8">
+              <div className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-blue-50 border border-blue-200/80 text-blue-700 text-xs font-bold shadow-2xs">
+                <span className="lg:hidden w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold">2</span>
+                <span>Langkah Kedua</span>
               </div>
               <h3 className="text-2xl sm:text-3xl font-extrabold text-on-surface">
                 Check-in Cepat &amp; Diagnosa Scanner Pabrikan
@@ -366,20 +384,19 @@ export default function LandingHowItWorks() {
           <div
             id="step-3"
             ref={step3.ref}
-            className={`relative grid grid-cols-1 lg:grid-cols-12 gap-8 items-center transition-opacity duration-700 ease-in-out ${
-              step3.isVisible ? 'opacity-100' : 'opacity-0'
+            className={`relative grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-24 xl:gap-28 items-center transition-opacity duration-700 ease-out will-change-[opacity] ${
+              step3.isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
             }`}
           >
             {/* Center Node Marker on lg screens */}
-            <div className="hidden lg:flex absolute left-1/2 -translate-x-1/2 w-9 h-9 rounded-full bg-indigo-600 text-white font-bold text-xs items-center justify-center shadow-md shadow-indigo-600/30 ring-4 ring-surface-container-low z-10">
+            <div className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-gradient-to-tr from-blue-600 via-blue-700 to-indigo-700 text-white font-black text-sm items-center justify-center shadow-lg shadow-blue-500/30 ring-8 ring-surface-container-low z-10 select-none">
               3
             </div>
-            <div className="lg:col-span-6 space-y-4">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-bold">
-                <span className="w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center text-[11px]">
-                  3
-                </span>
-                Langkah Ketiga
+
+            <div className="lg:col-span-6 space-y-4 lg:pr-8">
+              <div className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-blue-50 border border-blue-200/80 text-blue-700 text-xs font-bold shadow-2xs">
+                <span className="lg:hidden w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold">3</span>
+                <span>Langkah Ketiga</span>
               </div>
               <h3 className="text-2xl sm:text-3xl font-extrabold text-on-surface">
                 Pantau Progres Live &amp; Persetujuan Part via HP
@@ -400,7 +417,7 @@ export default function LandingHowItWorks() {
             </div>
 
             {/* Interactive Simulator Card 3 */}
-            <div className="lg:col-span-6">
+            <div className="lg:col-span-6 lg:pl-8">
               <div className="bg-surface-container-lowest p-6 rounded-2xl shadow-md border border-outline-variant/40 space-y-4 hover:shadow-lg transition-shadow">
                 <div className="flex items-center justify-between pb-3 border-b border-outline-variant/30">
                   <span className="text-xs font-bold uppercase tracking-wider text-secondary">
@@ -467,16 +484,17 @@ export default function LandingHowItWorks() {
           <div
             id="step-4"
             ref={step4.ref}
-            className={`relative grid grid-cols-1 lg:grid-cols-12 gap-8 items-center transition-opacity duration-700 ease-in-out ${
-              step4.isVisible ? 'opacity-100' : 'opacity-0'
+            className={`relative grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-24 xl:gap-28 items-center transition-opacity duration-700 ease-out will-change-[opacity] ${
+              step4.isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
             }`}
           >
             {/* Center Node Marker on lg screens */}
-            <div className="hidden lg:flex absolute left-1/2 -translate-x-1/2 w-9 h-9 rounded-full bg-emerald-600 text-white font-bold text-xs items-center justify-center shadow-md shadow-emerald-600/30 ring-4 ring-surface-container-low z-10">
+            <div className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-700 text-white font-black text-sm items-center justify-center shadow-lg shadow-emerald-500/30 ring-8 ring-surface-container-low z-10 select-none">
               4
             </div>
+
             {/* Visual Left */}
-            <div className="lg:col-span-6 order-2 lg:order-1">
+            <div className="lg:col-span-6 order-2 lg:order-1 lg:pr-8">
               <div className="bg-surface-container-lowest p-6 rounded-2xl shadow-md border border-outline-variant/40 space-y-4 hover:shadow-lg transition-shadow">
                 <div className="flex items-center justify-between pb-3 border-b border-outline-variant/30">
                   <div className="flex gap-2">
@@ -550,12 +568,10 @@ export default function LandingHowItWorks() {
             </div>
 
             {/* Text Right */}
-            <div className="lg:col-span-6 order-1 lg:order-2 space-y-4">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-bold">
-                <span className="w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center text-[11px]">
-                  4
-                </span>
-                Langkah Keempat
+            <div className="lg:col-span-6 order-1 lg:order-2 space-y-4 lg:pl-8">
+              <div className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-blue-50 border border-blue-200/80 text-blue-700 text-xs font-bold shadow-2xs">
+                <span className="lg:hidden w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold">4</span>
+                <span>Langkah Keempat</span>
               </div>
               <h3 className="text-2xl sm:text-3xl font-extrabold text-on-surface">
                 QC Akhir, Cuci Kendaraan, &amp; Buku Garansi Digital
