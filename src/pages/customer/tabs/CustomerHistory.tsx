@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import HistoryStatsCards from '../components/history/HistoryStatsCards';
@@ -6,15 +6,20 @@ import HistoryFilterBar from '../components/history/HistoryFilterBar';
 import HistoryTable from '../components/history/HistoryTable';
 import InvoiceDetailModal, { ServiceRecord } from '../components/history/InvoiceDetailModal';
 import ServiceReviewModal from '../components/history/ServiceReviewModal';
+import api from '@/api/client';
 
-export default function CustomerHistory() {
-  const { showNotification } = useAuth();
+interface CustomerHistoryProps {
+  refreshKey?: number;
+}
+
+export default function CustomerHistory({ refreshKey }: CustomerHistoryProps = {}) {
+  const { user, showNotification } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [vehicleFilter, setVehicleFilter] = useState('all');
   const [selectedInvoice, setSelectedInvoice] = useState<ServiceRecord | null>(null);
   const [selectedReview, setSelectedReview] = useState<ServiceRecord | null>(null);
 
-  const allRecords: ServiceRecord[] = [
+  const initialRecords: ServiceRecord[] = [
     {
       id: 1,
       date: '24 Okt 2024',
@@ -101,6 +106,46 @@ export default function CustomerHistory() {
       isFinalInvoice: true,
     },
   ];
+
+  const [allRecords, setAllRecords] = useState<ServiceRecord[]>(initialRecords);
+
+  useEffect(() => {
+    const loadHistory = async () => {
+      try {
+        const res = await api.get(`/customer/reservations${user?.id ? `?user_id=${user.id}` : ''}`);
+        if (res.data?.reservations && res.data.reservations.length > 0) {
+          const mapped: ServiceRecord[] = res.data.reservations.map((r: any) => {
+            const isCompleted = r.status === 'completed';
+            const vName = r.vehicle ? `${r.vehicle.brand} ${r.vehicle.model}` : (r.vehicle_type || 'Kendaraan');
+            const partsList = r.work_order?.items?.map((it: any) => it.inventory?.name || 'Komponen Suku Cadang') || ['Paket Jasa Servis Terpadu'];
+
+            return {
+              id: r.id,
+              date: r.service_date ? new Date(r.service_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Hari Ini',
+              time: `${(r.service_time || '09:00').slice(0, 5)} WIB`,
+              code: r.payment ? `INV-BKL-${String(r.id).padStart(4, '0')}` : `WO-2024-${String(r.id).padStart(4, '0')}`,
+              mechanic: r.mechanic ? `Bay 02 - ${r.mechanic.name}` : 'Front Desk Dispatcher',
+              vehicle: vName,
+              plate: r.license_plate || r.vehicle?.plate_number || 'B 1945 ANS',
+              vehicleKey: vName.toLowerCase().includes('cr-v') ? 'crv' : (vName.toLowerCase().includes('yaris') ? 'yaris' : 'nmax'),
+              serviceTitle: r.service_type || 'Servis Berkala & Tune Up',
+              parts: partsList,
+              cost: `Rp ${Number(r.total_price || 350000).toLocaleString('id-ID')}`,
+              costNote: isCompleted ? 'Lunas Terverifikasi' : 'Estimasi Tagihan',
+              status: isCompleted ? 'Selesai & Lunas' : 'Proses Pengerjaan',
+              statusType: isCompleted ? 'done' : 'process',
+              isFinalInvoice: isCompleted,
+            };
+          });
+          setAllRecords(mapped);
+        }
+      } catch (err) {
+        console.warn('Could not fetch reservations history, keeping fallback cache:', err);
+      }
+    };
+
+    loadHistory();
+  }, [user, refreshKey]);
 
   const handleExportPdf = () => {
     showNotification('Menyiapkan berkas rangkuman riwayat servis berkala dalam format PDF...', 'info');
