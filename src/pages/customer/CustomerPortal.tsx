@@ -27,6 +27,11 @@ export default function CustomerPortal() {
   const [isAddVehicleOpen, setIsAddVehicleOpen] = useState(false);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [isEmergencyOpen, setIsEmergencyOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const handleDataRefresh = () => {
+    setRefreshKey((k) => k + 1);
+  };
 
   return (
     <div className="bg-slate-50/70 font-sans text-slate-900 antialiased min-h-screen flex flex-col">
@@ -165,9 +170,10 @@ export default function CustomerPortal() {
           <CustomerVehicles
             onOpenAddVehicle={() => setIsAddVehicleOpen(true)}
             onOpenBooking={() => setIsBookingOpen(true)}
+            refreshKey={refreshKey}
           />
         )}
-        {activeTab === 'riwayat' && <CustomerHistory />}
+        {activeTab === 'riwayat' && <CustomerHistory refreshKey={refreshKey} />}
         {activeTab === 'profil' && (
           <CustomerProfile onLogout={() => setIsLogoutConfirmOpen(true)} />
         )}
@@ -196,12 +202,12 @@ export default function CustomerPortal() {
       <BookingServiceModal
         isOpen={isBookingOpen}
         onClose={() => setIsBookingOpen(false)}
-        onSuccess={() => {}}
+        onSuccess={handleDataRefresh}
       />
       <AddVehicleModal
         isOpen={isAddVehicleOpen}
         onClose={() => setIsAddVehicleOpen(false)}
-        onSuccess={() => {}}
+        onSuccess={handleDataRefresh}
       />
       <LogoutConfirmDialog
         isOpen={isLogoutConfirmOpen}
