@@ -16,7 +16,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-  const [otpCode, setOtpCode] = useState<string[]>(['8', '4', '2', '', '', '']);
+  const [otpCode, setOtpCode] = useState<string[]>(['', '', '', '', '', '']);
   const [timerSeconds, setTimerSeconds] = useState(59);
 
   const otpInputsRef = useRef<(HTMLInputElement | null)[]>([]);
@@ -63,6 +63,17 @@ export default function LoginPage() {
 
     try {
       const res = await api.post('/login', { email, password });
+      if (res.data?.require_otp) {
+        if (res.data.email) setEmail(res.data.email);
+        setMode('otp');
+        setTimerSeconds(59);
+        if (res.data?.demo_otp) {
+          setOtpCode(String(res.data.demo_otp).split('').slice(0, 6));
+        }
+        showNotification(`Kode OTP verifikasi telah dikirim (${res.data.demo_otp || '123456'}).`, 'info');
+        return;
+      }
+
       loginUser(res.data.user);
       showNotification(`Selamat datang kembali, ${res.data.user.name}!`, 'success');
 
@@ -70,7 +81,7 @@ export default function LoginPage() {
       else if (res.data.user.role === 'mechanic') navigate({ to: '/mechanic' });
       else navigate({ to: '/customer' });
     } catch (err: any) {
-      setErrorMsg(err.response?.data?.message || 'Email atau kata sandi tidak valid. Silakan coba lagi.');
+      setErrorMsg(err.response?.data?.message || err.message || 'Email atau kata sandi tidak valid. Silakan coba lagi.');
     } finally {
       setLoading(false);
     }
@@ -83,12 +94,23 @@ export default function LoginPage() {
     setErrorMsg('');
 
     try {
-      await api.post('/register', { name, email, password, phone });
+      const res = await api.post('/register', { name, email, password, phone });
+      if (res.data?.email) {
+        setEmail(res.data.email);
+      }
       setMode('otp');
       setTimerSeconds(59);
+      if (res.data?.demo_otp) {
+        setOtpCode(String(res.data.demo_otp).split('').slice(0, 6));
+      }
       showNotification('Pendaftaran berhasil! Silakan masukkan 6 digit kode OTP verifikasi.', 'info');
     } catch (err: any) {
-      setErrorMsg(err.response?.data?.message || 'Gagal melakukan pendaftaran. Periksa kembali format data Anda.');
+      const backendMsg =
+        err.response?.data?.message ||
+        (err.response?.data?.errors ? Object.values(err.response.data.errors).flat().join(', ') : '') ||
+        err.message ||
+        'Gagal melakukan pendaftaran. Periksa kembali format data Anda.';
+      setErrorMsg(backendMsg);
     } finally {
       setLoading(false);
     }
@@ -107,14 +129,39 @@ export default function LoginPage() {
     setErrorMsg('');
 
     try {
-      const res = await api.post('/verify-otp', { email: email || 'ans***@gmail.com', otp: code });
+      const res = await api.post('/verify-otp', {
+        email: email || 'customer@bengkel.com',
+        otp_code: code,
+        otp: code,
+      });
       loginUser(res.data.user);
       showNotification('Verifikasi berhasil! Selamat datang di Bengkel Ansor.', 'success');
-      navigate({ to: '/customer' });
+      
+      if (res.data.user.role === 'admin') navigate({ to: '/admin' });
+      else if (res.data.user.role === 'mechanic') navigate({ to: '/mechanic' });
+      else navigate({ to: '/customer' });
     } catch (err: any) {
       setErrorMsg(err.response?.data?.message || 'Kode OTP tidak valid atau kedaluwarsa. Gunakan kode simulasi 123456');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Handle Resend OTP
+  const handleResendOtp = async () => {
+    if (!email) {
+      showNotification('Harap isi email Anda terlebih dahulu.', 'error');
+      return;
+    }
+    setTimerSeconds(59);
+    try {
+      const res = await api.post('/resend-otp', { email });
+      if (res.data?.demo_otp) {
+        setOtpCode(String(res.data.demo_otp).split('').slice(0, 6));
+      }
+      showNotification(res.data?.message || 'Kode OTP baru telah dikirimkan ke nomor Anda.', 'info');
+    } catch (err: any) {
+      showNotification('Kode OTP baru telah dikirimkan (123456).', 'info');
     }
   };
 
@@ -138,7 +185,7 @@ export default function LoginPage() {
   };
 
   const pasteClipboardDemo = () => {
-    const demo = ['8', '4', '2', '9', '1', '5'];
+    const demo = ['1', '2', '3', '4', '5', '6'];
     setOtpCode(demo);
     otpInputsRef.current[5]?.focus();
   };
@@ -370,10 +417,7 @@ export default function LoginPage() {
                         id="resend-btn"
                         type="button"
                         disabled={timerSeconds > 0}
-                        onClick={() => {
-                          setTimerSeconds(59);
-                          showNotification('Kode OTP baru telah dikirimkan ke nomor Anda.', 'info');
-                        }}
+                        onClick={handleResendOtp}
                       >
                         <span>Kirim ulang kode</span>
                         <span className="font-label-code text-label-code font-bold text-secondary" id="timer">
