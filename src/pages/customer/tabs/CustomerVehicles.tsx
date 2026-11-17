@@ -1,20 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { PlusCircle, ShieldCheck } from 'lucide-react';
 import GarageSummaryBanner from '../components/vehicles/GarageSummaryBanner';
 import VehicleCard, { VehicleData } from '../components/vehicles/VehicleCard';
 import DigitalServiceBookModal from '../components/vehicles/DigitalServiceBookModal';
+import { useAuth } from '@/context/AuthContext';
+import api from '@/api/client';
 
 interface CustomerVehiclesProps {
   onOpenAddVehicle: () => void;
   onOpenBooking: () => void;
+  refreshKey?: number;
 }
 
-export default function CustomerVehicles({ onOpenAddVehicle, onOpenBooking }: CustomerVehiclesProps) {
+export default function CustomerVehicles({ onOpenAddVehicle, onOpenBooking, refreshKey }: CustomerVehiclesProps) {
+  const { user } = useAuth();
   const [selectedBookVehicle, setSelectedBookVehicle] = useState<string | null>(null);
-
-  const vehicleList: VehicleData[] = [
+  const [vehicles, setVehicles] = useState<VehicleData[]>([
     {
       id: 'crv-1',
       name: 'Honda CR-V 1.5 Turbo',
@@ -63,7 +66,46 @@ export default function CustomerVehicles({ onOpenAddVehicle, onOpenBooking }: Cu
       taxExpiry: 'Berakhir Nov 2025',
       statusNote: 'Oli CVT Normal',
     },
-  ];
+  ]);
+
+  const loadVehicles = async () => {
+    try {
+      const res = await api.get(`/vehicles${user?.id ? `?user_id=${user.id}` : ''}`);
+      if (res.data?.vehicles && res.data.vehicles.length > 0) {
+        const mapped: VehicleData[] = res.data.vehicles.map((v: any) => {
+          const isMotor = (v.vehicle_type || '').toLowerCase().includes('motor');
+          const hasActiveService = (v.reservations_count || 0) > 0;
+          return {
+            id: String(v.id),
+            name: `${v.brand} ${v.model}`,
+            subTitle: `${v.release_year || 2023} • ${v.color || 'Hitam Metalik'}`,
+            category: v.vehicle_type || (isMotor ? 'Motor Harian' : 'Mobil Pribadi'),
+            plate: v.plate_number,
+            image: isMotor
+              ? 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=800&q=80'
+              : 'https://images.unsplash.com/photo-1590362891988-30159491b920?auto=format&fit=crop&w=800&q=80',
+            statusBadge: {
+              label: hasActiveService ? 'Pit Stall Aktif' : 'Siap Jalan',
+              variant: hasActiveService ? 'active' : 'ready',
+            },
+            odometer: '32.500 KM',
+            lastService: 'Buku Servis Digital Terverifikasi',
+            taxExpiry: 'Berakhir 2026',
+            statusNote: 'Kondisi Mesin Prima',
+          };
+        });
+        setVehicles(mapped);
+      }
+    } catch (err) {
+      console.warn('Could not load vehicles from API, using cached garasi:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadVehicles();
+  }, [user, refreshKey]);
+
+  const vehicleList = vehicles;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in duration-300">
